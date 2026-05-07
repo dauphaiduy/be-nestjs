@@ -20,6 +20,8 @@ model User {
   accountType AccountType @default(LOCAL)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @default(now()) @updatedAt
+  roleId      Int?
+  role        Role?       @relation(fields: [roleId], references: [id])
 
   @@map("users")
 }
@@ -28,4 +30,16 @@ enum AccountType {
   LOCAL
   GOOGLE
   GITHUB
+}
+
+model Role {
+  id          Int         @id @default(autoincrement())
+  name        String      @unique
+  permissions Json?
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now()) @updatedAt
+
+  @@map("roles")
+  users User[]
 }

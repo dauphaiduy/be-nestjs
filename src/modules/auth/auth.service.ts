@@ -3,6 +3,7 @@ import { LoginDto } from './dto/login.dto';
 import { UserService } from '../user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import { RegisterDto } from './dto/register.dto';
+import { comparePassword } from 'src/common/utils/hash.util';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +18,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
     if (user?.password !== password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    const isPasswordValid = await comparePassword(password, user.password);
+    if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 

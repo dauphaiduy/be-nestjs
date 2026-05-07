@@ -3,6 +3,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserQueries } from 'src/common/shared/queries';
 import { UserRepository } from 'src/common/shared/repositories';
+import { hashPassword } from 'src/common/utils';
+import { AccountType } from '@prisma/client';
 
 @Injectable()
 export class UserService {
@@ -11,8 +13,18 @@ export class UserService {
     private readonly userRepository: UserRepository,
   ) {}
 
-  create(createUserDto: CreateUserDto) {
-    return this.userRepository.create({ data: createUserDto });
+  async create(createUserDto: CreateUserDto) {
+    const { accountType } = createUserDto;
+    let hashedPassword: string | undefined;
+    if (accountType === AccountType.LOCAL) {
+      if (!createUserDto.password) {
+        throw new Error('Password is required for local accounts');
+      }
+      hashedPassword = await hashPassword(createUserDto.password);
+    }
+    return this.userRepository.create({
+      data: { ...createUserDto, password: hashedPassword },
+    });
   }
 
   findAll() {
