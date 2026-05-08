@@ -52,6 +52,6 @@ import { PermissionValMiddleware } from './common/middlewares/permission-val.mid
 })
 export class AppModule implements NestModule {
   public configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(PermissionValMiddleware).forRoutes('*');
+    consumer.apply(PermissionValMiddleware).forRoutes('*path');
   }
 }

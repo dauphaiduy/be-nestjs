@@ -15,7 +15,7 @@ async function bootstrap() {
   );
   const config = app.get(ConfigService);
   const port = config.get<number>('app.port') || 3000;
-  const prefix = config.get<string>('app.apiPrefix') || 'api';
+  const prefix = config.get<string>('app.apiPrefix') || 'v1';
   app.setGlobalPrefix(prefix);
   await app.listen(port);
 }
