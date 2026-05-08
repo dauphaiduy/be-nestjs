@@ -1,14 +1,17 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { QueryUserDto } from './dto/query-user.dto';
 import { Permissions } from 'src/common/decorators';
 import { UserPermissions } from './permissions/user.permissions';
 
@@ -20,6 +23,12 @@ export class UserController {
   @Post()
   create(@Body() createUserDto: CreateUserDto) {
     return this.userService.create(createUserDto);
+  }
+
+  @Permissions(UserPermissions.PERMISSIONS.USER_READ)
+  @Get()
+  findAll(@Query() query: QueryUserDto) {
+    return this.userService.findAll(query);
   }
 
   @Permissions(UserPermissions.PERMISSIONS.USER_UPDATE)

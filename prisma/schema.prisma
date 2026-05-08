@@ -43,3 +43,18 @@ model Role {
   @@map("roles")
   users User[]
 }
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?
+  action     String
+  resource   String
+  resourceId String?
+  statusCode Int?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@map("audit_logs")
+}

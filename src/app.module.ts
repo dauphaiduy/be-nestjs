@@ -4,10 +4,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { appConfig, databaseConfig, jwtConfig } from './config/config';
 import { AuthGuard } from './common/guard';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { AuditLogInterceptor } from './common/interceptors';
 import { PermissionValMiddleware } from './common/middlewares/permission-val.middleware';
 
 @Module({
@@ -19,6 +21,7 @@ import { PermissionValMiddleware } from './common/middlewares/permission-val.mid
     AuthModule,
     RolesModule,
     PermissionsModule,
+    AuditLogModule,
   ],
   controllers: [AppController],
   providers: [
@@ -26,6 +29,10 @@ import { PermissionValMiddleware } from './common/middlewares/permission-val.mid
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditLogInterceptor,
     },
   ],
 })

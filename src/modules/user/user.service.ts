@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { QueryUserDto } from './dto/query-user.dto';
 import { UserQueries } from 'src/common/shared/queries';
 import { UserRepository } from 'src/common/shared/repositories';
 import { hashPassword } from 'src/common/utils';
-import { AccountType } from '@prisma/client';
+import { AccountType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class UserService {
@@ -27,8 +28,37 @@ export class UserService {
     });
   }
 
-  findAll() {
-    return this.userQueries.find();
+  async findAll(query: QueryUserDto) {
+    const {
+      page = 1,
+      limit = 10,
+      email,
+      username,
+      name,
+      isActive,
+      accountType,
+      roleId,
+    } = query;
+    const where: Prisma.UserWhereInput = {
+      ...(email && { email: { contains: email, mode: 'insensitive' } }),
+      ...(username && {
+        username: { contains: username, mode: 'insensitive' },
+      }),
+      ...(name && { name: { contains: name, mode: 'insensitive' } }),
+      ...(isActive !== undefined && { isActive }),
+      ...(accountType && { accountType }),
+      ...(roleId !== undefined && { roleId }),
+    };
+    const [items, total] = await Promise.all([
+      this.userQueries.find({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        omit: { password: true },
+      }),
+      this.userQueries.count({ where }),
+    ]);
+    return { items, total, page, limit };
   }
 
   findOne(username: string) {

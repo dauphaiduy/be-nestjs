@@ -7,4 +7,6 @@ export class UserQueries extends BaseRepository {
     this.client.user.findFirst(...args);
   find = (...args: Parameters<typeof this.client.user.findMany>) =>
     this.client.user.findMany(...args);
+  count = (...args: Parameters<typeof this.client.user.count>) =>
+    this.client.user.count(...args);
 }
