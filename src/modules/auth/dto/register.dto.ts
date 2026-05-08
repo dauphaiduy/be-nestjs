@@ -1,5 +1,5 @@
 import { AccountType } from '@prisma/client';
-import { IsEmail, IsEnum, IsString } from 'class-validator';
+import { IsEmail, IsEnum, IsNumber, IsString } from 'class-validator';
 
 export class RegisterDto {
   @IsString()
@@ -12,4 +12,6 @@ export class RegisterDto {
   name: string;
   @IsEnum(AccountType)
   accountType: AccountType;
+  @IsNumber()
+  roleId: number;
 }
