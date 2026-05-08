@@ -4,12 +4,17 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { appConfig, databaseConfig, jwtConfig } from './config/config';
 import { AuthGuard } from './common/guard';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
-import { AuditLogInterceptor } from './common/interceptors';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import {
+  AuditLogInterceptor,
+  TransformInterceptor,
+} from './common/interceptors';
+import { AllExceptionsFilter } from './common/filters';
 import { PermissionValMiddleware } from './common/middlewares/permission-val.middleware';
 
 @Module({
@@ -22,13 +27,22 @@ import { PermissionValMiddleware } from './common/middlewares/permission-val.mid
     RolesModule,
     PermissionsModule,
     AuditLogModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
     {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+    {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TransformInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

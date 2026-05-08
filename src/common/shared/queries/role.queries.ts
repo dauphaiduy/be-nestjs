@@ -9,4 +9,6 @@ export class RoleQueries extends BaseRepository {
     this.client.role.findMany(...args);
   findUnique = (...args: Parameters<typeof this.client.role.findUnique>) =>
     this.client.role.findUnique(...args);
+  count = (...args: Parameters<typeof this.client.role.count>) =>
+    this.client.role.count(...args);
 }
