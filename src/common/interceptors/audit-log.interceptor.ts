@@ -2,6 +2,7 @@ import {
   CallHandler,
   ExecutionContext,
   Injectable,
+  Logger,
   NestInterceptor,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
@@ -24,6 +25,8 @@ function sanitize(obj: unknown): unknown {
 
 @Injectable()
 export class AuditLogInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(AuditLogInterceptor.name);
+
   constructor(private readonly auditLogService: AuditLogService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -36,6 +39,9 @@ export class AuditLogInterceptor implements NestInterceptor {
       req.socket?.remoteAddress;
     const userAgent = headers['user-agent'];
 
+    // Skip logging for GET requests to reduce noise, but you can adjust this as needed
+    if (method === 'GET') return next.handle();
+
     const resource = url.split('?')[0];
     const resourceId = this.extractResourceId(url);
 
@@ -46,19 +52,23 @@ export class AuditLogInterceptor implements NestInterceptor {
     });
 
     const saveLog = (statusCode: number, responseBody?: unknown) => {
-      void this.auditLogService.create({
-        userId,
-        action: method,
-        resource,
-        resourceId,
-        statusCode,
-        ipAddress,
-        userAgent,
-        metadata: {
-          request: requestData,
-          response: responseBody ?? null,
-        },
-      });
+      this.auditLogService
+        .create({
+          userId,
+          action: method,
+          resource,
+          resourceId,
+          statusCode,
+          ipAddress,
+          userAgent,
+          metadata: {
+            request: requestData,
+            response: responseBody ?? null,
+          },
+        })
+        .catch((err: unknown) =>
+          this.logger.error('Failed to save audit log', err),
+        );
     };
 
     return next.handle().pipe(

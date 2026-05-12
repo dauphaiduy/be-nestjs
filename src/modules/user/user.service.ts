@@ -66,6 +66,14 @@ export class UserService {
   }
 
   update(id: number, updateUserDto: UpdateUserDto) {
+    if (updateUserDto.password) {
+      return hashPassword(updateUserDto.password).then((hashedPassword) => {
+        return this.userRepository.update({
+          where: { id },
+          data: { ...updateUserDto, password: hashedPassword },
+        });
+      });
+    }
     return this.userRepository.update({ where: { id }, data: updateUserDto });
   }
 
