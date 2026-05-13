@@ -13,10 +13,14 @@ export class AuditLogService {
   ) {}
 
   create(dto: CreateAuditLogDto) {
+    const metadata =
+      dto.metadata != null
+        ? (JSON.parse(JSON.stringify(dto.metadata)) as Prisma.InputJsonValue)
+        : undefined;
     return this.auditLogRepository.create({
       data: {
         ...dto,
-        metadata: dto.metadata as Prisma.InputJsonValue | undefined,
+        metadata,
       },
     });
   }
