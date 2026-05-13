@@ -10,6 +10,8 @@ import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { CategoryModule } from './modules/category/category.module';
+import { ProductModule } from './modules/product/product.module';
 import {
   AuditLogInterceptor,
   TransformInterceptor,
@@ -28,6 +30,8 @@ import { PermissionValMiddleware } from './common/middlewares/permission-val.mid
     PermissionsModule,
     AuditLogModule,
     DashboardModule,
+    CategoryModule,
+    ProductModule,
   ],
   controllers: [AppController],
   providers: [

@@ -58,3 +58,36 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  products    Product[]
+
+  @@map("categories")
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Product {
+  id          Int           @id @default(autoincrement())
+  name        String
+  description String?
+  price       Decimal       @db.Decimal(10, 2)
+  stock       Int           @default(0)
+  status      ProductStatus @default(ACTIVE)
+  images      String[]
+  categoryId  Int
+  category    Category      @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now()) @updatedAt
+
+  @@map("products")
+}
