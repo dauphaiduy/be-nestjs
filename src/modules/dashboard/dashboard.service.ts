@@ -14,8 +14,10 @@ export class DashboardService {
   async getSummary() {
     const [totalUsers, activeUsers, totalRoles, totalAuditLogs] =
       await Promise.all([
-        this.userQueries.count({}),
-        this.userQueries.count({ where: { isActive: true } }),
+        this.userQueries.count({ where: { userType: { equals: 'CUSTOMER' } } }),
+        this.userQueries.count({
+          where: { isActive: true, userType: { equals: 'CUSTOMER' } },
+        }),
         this.roleQueries.count({}),
         this.auditLogQueries.count({}),
       ]);
@@ -41,7 +43,7 @@ export class DashboardService {
     since.setDate(since.getDate() - days);
 
     const users = await this.userQueries.find({
-      where: { createdAt: { gte: since } },
+      where: { createdAt: { gte: since }, userType: { equals: 'CUSTOMER' } },
       select: { createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
