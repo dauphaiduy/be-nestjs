@@ -1,7 +1,27 @@
 import { Module } from '@nestjs/common';
 import { PrismaService } from '../prisma';
-import { UserQueries, RoleQueries, AuditLogQueries, CategoryQueries, ProductQueries, CustomerProfileQueries } from './queries';
-import { UserRepository, RoleRepository, AuditLogRepository, CategoryRepository, ProductRepository, CustomerProfileRepository } from './repositories';
+import {
+  UserQueries,
+  RoleQueries,
+  AuditLogQueries,
+  CategoryQueries,
+  ProductQueries,
+  CustomerProfileQueries,
+  CartQueries,
+  CartItemQueries,
+  OrderQueries,
+} from './queries';
+import {
+  UserRepository,
+  RoleRepository,
+  AuditLogRepository,
+  CategoryRepository,
+  ProductRepository,
+  CustomerProfileRepository,
+  CartRepository,
+  CartItemRepository,
+  OrderRepository,
+} from './repositories';
 
 const providers = [
   PrismaService,
@@ -17,6 +37,12 @@ const providers = [
   ProductRepository,
   CustomerProfileQueries,
   CustomerProfileRepository,
+  CartQueries,
+  CartRepository,
+  CartItemQueries,
+  CartItemRepository,
+  OrderQueries,
+  OrderRepository,
 ];
 
 @Module({

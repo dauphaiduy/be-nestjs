@@ -4,3 +4,6 @@ export * from './audit-log.queries';
 export * from './category.queries';
 export * from './product.queries';
 export * from './customer-profile.queries';
+export * from './cart.queries';
+export * from './cart-item.queries';
+export * from './order.queries';

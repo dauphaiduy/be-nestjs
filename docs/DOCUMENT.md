@@ -17,12 +17,15 @@
    - [Categories](#categories)
    - [Products](#products)
    - [Customer Profile](#customer-profile)
-7. [Standard Response Format](#standard-response-format)
-8. [Authentication & Authorization](#authentication--authorization)
-9. [Global Providers](#global-providers)
-10. [Data Layer — Queries & Repositories](#data-layer--queries--repositories)
-11. [Running the Application](#running-the-application)
-12. [Docker](#docker)
+   - [Cart](#cart)
+   - [Orders](#orders)
+7. [Shopping Flow](#shopping-flow)
+8. [Standard Response Format](#standard-response-format)
+9. [Authentication & Authorization](#authentication--authorization)
+10. [Global Providers](#global-providers)
+11. [Data Layer — Queries & Repositories](#data-layer--queries--repositories)
+12. [Running the Application](#running-the-application)
+13. [Docker](#docker)
 
 ---
 
@@ -38,6 +41,7 @@ A RESTful NestJS API providing:
 - Automatic audit logging for every request/response
 - Dashboard analytics (summary counts, recent logs, user registration trend)
 - Product catalogue management with category organisation — public read access
+- **Shopping flow** — cart management, atomic checkout with stock reservation, order lifecycle state machine, and abandoned-order auto-release scheduler
 - Standardised API response envelope and global exception handling
 
 ---
@@ -102,7 +106,9 @@ src/
     ├── dashboard/          Analytics endpoints
     ├── category/           Category CRUD
     ├── product/            Product CRUD
-    └── customer-profile/   Customer self-service profile
+    ├── customer-profile/   Customer self-service profile
+    ├── cart/               Cart management (findOrCreate, add/update/remove items)
+    └── order/              Checkout, order lifecycle, abandoned-order scheduler
 ```
 
 ---
@@ -192,6 +198,48 @@ Copy `.env.example` to `.env` and fill in values.
 | `categoryId` | `Int` FK → `categories.id` | |
 | `createdAt` | `DateTime` | |
 | `updatedAt` | `DateTime` | |
+
+### `carts`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `Int` PK | Auto-increment |
+| `userId` | `Int` FK → `users.id` | One active cart per user |
+| `status` | `CartStatus` | `ACTIVE` \| `ORDERED` \| `ABANDONED` — Default `ACTIVE` |
+| `createdAt` | `DateTime` | |
+| `updatedAt` | `DateTime` | |
+
+### `cart_items`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `Int` PK | Auto-increment |
+| `cartId` | `Int` FK → `carts.id` | |
+| `productId` | `Int` FK → `products.id` | |
+| `quantity` | `Int` | |
+
+Unique constraint on `(cartId, productId)` — upsert behaviour: adding the same product increments quantity.
+
+### `orders`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `Int` PK | Auto-increment |
+| `userId` | `Int` FK → `users.id` | |
+| `status` | `OrderStatus` | See state machine below |
+| `totalAmount` | `Decimal(10,2)` | Snapshotted at checkout |
+| `createdAt` | `DateTime` | |
+| `updatedAt` | `DateTime` | |
+
+### `order_items`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `Int` PK | Auto-increment |
+| `orderId` | `Int` FK → `orders.id` | |
+| `productId` | `Int` FK → `products.id` | |
+| `quantity` | `Int` | |
+| `priceAtTime` | `Decimal(10,2)` | **Snapshot** — never references live product price |
 
 ### `audit_logs`
 
@@ -423,7 +471,14 @@ Returns all permission strings registered in the system at startup.
     "product:create": "Create product",
     "product:read": "Read product",
     "product:update": "Update product",
-    "product:delete": "Delete product"
+    "product:delete": "Delete product",
+    "cart:read": "Read cart",
+    "cart:write": "Write cart",
+    "order:read": "Read own orders",
+    "order:read_all": "Read all orders",
+    "order:update_status": "Update order status",
+    "order:cancel": "Cancel order",
+    "order:refund": "Refund order"
   },
   "timestamp": "..."
 }
@@ -703,6 +758,208 @@ Create or update the authenticated customer's profile (upsert). All fields are o
 
 ---
 
+### Cart
+
+> Requires authentication (any user type).
+
+A cart is **automatically created** on the first request — there is no explicit "create cart" endpoint.
+
+#### `GET /v1/cart`
+
+Return the authenticated user's active cart with all items (including product details). Creates an empty cart if none exists.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "data": {
+    "id": 1,
+    "userId": 5,
+    "status": "ACTIVE",
+    "items": [
+      {
+        "id": 3,
+        "cartId": 1,
+        "productId": 10,
+        "quantity": 2,
+        "product": { "id": 10, "name": "Wireless Headphones", "price": "199.99", "stock": 48 }
+      }
+    ],
+    "createdAt": "2026-05-14T00:00:00.000Z",
+    "updatedAt": "2026-05-14T00:00:00.000Z"
+  },
+  "timestamp": "..."
+}
+```
+
+---
+
+#### `POST /v1/cart/items`
+
+Add a product to the cart. If the item already exists its quantity is incremented. Validates that the product has sufficient stock.
+
+**Request body:**
+```json
+{ "productId": 10, "quantity": 2 }
+```
+
+**Errors:** `404` product not found, `400` insufficient stock.
+
+---
+
+#### `PATCH /v1/cart/items/:productId`
+
+Set the exact quantity for a cart item. Validates stock.
+
+**Request body:**
+```json
+{ "quantity": 3 }
+```
+
+**Errors:** `404` item not in cart, `400` insufficient stock.
+
+---
+
+#### `DELETE /v1/cart/items/:productId`
+
+Remove a single item from the cart.
+
+**Errors:** `404` item not in cart.
+
+---
+
+#### `DELETE /v1/cart`
+
+Remove all items from the active cart.
+
+---
+
+### Orders
+
+> Requires authentication.
+
+#### `POST /v1/orders/checkout`
+
+Convert the active cart into an order. This is an **atomic transaction**:
+
+1. For every cart item: verifies stock and decrements it atomically (`updateMany` with `gte` check).
+2. Creates an `Order` with snapshotted `priceAtTime` per item.
+3. Marks the cart status as `ORDERED`.
+
+If any product runs out of stock mid-checkout the entire transaction is rolled back.
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "data": {
+    "id": 7,
+    "userId": 5,
+    "status": "PENDING",
+    "totalAmount": "399.98",
+    "items": [
+      {
+        "id": 1,
+        "orderId": 7,
+        "productId": 10,
+        "quantity": 2,
+        "priceAtTime": "199.99",
+        "product": { "id": 10, "name": "Wireless Headphones" }
+      }
+    ],
+    "createdAt": "2026-05-14T06:00:00.000Z",
+    "updatedAt": "2026-05-14T06:00:00.000Z"
+  },
+  "timestamp": "..."
+}
+```
+
+**Errors:** `400` no active cart / cart is empty / insufficient stock.
+
+---
+
+#### `GET /v1/orders`
+
+List orders with optional status filter and pagination.
+
+- `CUSTOMER` users see only their own orders.
+- `ADMIN` / `STAFF` see all orders.
+
+**Query parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `status` | enum | Filter by `OrderStatus` |
+| `page` | number | Default `1` |
+| `limit` | number | Default `10` |
+
+---
+
+#### `GET /v1/orders/:id`
+
+Get a single order by ID. Customers receive `403` if the order belongs to another user.
+
+**Errors:** `404` not found, `403` access denied.
+
+---
+
+#### `PATCH /v1/orders/:id/status`
+
+Transition an order through the state machine.
+
+**Request body:**
+```json
+{ "status": "CONFIRMED" }
+```
+
+**Rules:**
+
+| Actor | Allowed transitions |
+|-------|--------------------|
+| Customer | `PENDING → CANCELLED` only |
+| Admin / Staff | Any valid transition (see state machine below) |
+
+When transitioning to `CANCELLED`, stock is automatically restored inside a transaction.
+
+**Errors:** `400` invalid transition, `403` insufficient privilege, `404` not found.
+
+---
+
+## Shopping Flow
+
+### End-to-end flow
+
+```
+User
+ └─ Browse products      GET /v1/products
+      └─ Add to cart      POST /v1/cart/items
+           └─ View cart   GET /v1/cart
+                └─ Checkout  POST /v1/orders/checkout  ← atomic transaction
+                     └─ View orders  GET /v1/orders
+                          └─ (Payment — future)
+```
+
+### Order Status State Machine
+
+```
+PENDING
+  ├─ CONFIRMED    (admin/staff action)
+  │     ├─ SHIPPED
+  │     │     └─ DELIVERED
+  │     │           └─ REFUNDED  (admin action)
+  │     ├─ CANCELLED  (+ stock restored)
+  │     └─ REFUNDED
+  └─ CANCELLED    (customer or admin — stock restored)
+```
+
+### Abandoned Order Scheduler
+
+`OrderScheduler` runs every **5 minutes** (via `@nestjs/schedule`). It finds all `PENDING` orders older than **30 minutes**, restores their stock, and marks them `CANCELLED`. This prevents indefinitely reserved stock from abandoned checkouts.
+
+---
+
 ## Standard Response Format
 
 ### Success
@@ -828,6 +1085,12 @@ The codebase separates reads from writes:
 | `ProductRepository` | `create`, `update`, `delete` |
 | `CustomerProfileQueries` | `findOne`, `findUnique` |
 | `CustomerProfileRepository` | `create`, `update`, `upsert` |
+| `CartQueries` | `find`, `findOne`, `findUnique`, `count` |
+| `CartRepository` | `create`, `update`, `upsert`, `delete` |
+| `CartItemQueries` | `find`, `findOne`, `findUnique` |
+| `CartItemRepository` | `create`, `update`, `upsert`, `delete`, `updateMany`, `deleteMany` |
+| `OrderQueries` | `find`, `findOne`, `findUnique`, `count` |
+| `OrderRepository` | `create`, `update`, `updateMany`, `delete` |
 
 All classes extend `BaseQueries` / `BaseRepository` from `src/common/bases/`.
 

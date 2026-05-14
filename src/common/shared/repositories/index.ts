@@ -4,3 +4,6 @@ export * from './audit-log.repository';
 export * from './category.repository';
 export * from './product.repository';
 export * from './customer-profile.repository';
+export * from './cart.repository';
+export * from './cart-item.repository';
+export * from './order.repository';
