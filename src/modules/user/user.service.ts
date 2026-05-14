@@ -37,6 +37,7 @@ export class UserService {
       name,
       isActive,
       accountType,
+      userType,
       roleId,
     } = query;
     const where: Prisma.UserWhereInput = {
@@ -47,6 +48,7 @@ export class UserService {
       ...(name && { name: { contains: name, mode: 'insensitive' } }),
       ...(isActive !== undefined && { isActive }),
       ...(accountType && { accountType }),
+      ...(userType && { userType }),
       ...(roleId !== undefined && { roleId }),
     };
     const [items, total] = await Promise.all([

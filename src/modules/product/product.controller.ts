@@ -13,7 +13,7 @@ import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
-import { Permissions } from 'src/common/decorators';
+import { Permissions, Public } from 'src/common/decorators';
 import { ProductPermissions } from './permissions/product.permissions';
 
 @Controller('products')
@@ -26,13 +26,13 @@ export class ProductController {
     return this.productService.create(createProductDto);
   }
 
-  @Permissions(ProductPermissions.PERMISSIONS.PRODUCT_READ)
+  @Public()
   @Get()
   findAll(@Query() query: QueryProductDto) {
     return this.productService.findAll(query);
   }
 
-  @Permissions(ProductPermissions.PERMISSIONS.PRODUCT_READ)
+  @Public()
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.productService.findOne(id);

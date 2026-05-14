@@ -1,4 +1,5 @@
 import { PermissionVal } from 'src/common/models';
+import { UserType } from '@prisma/client';
 
 declare global {
   namespace Express {
@@ -7,6 +8,7 @@ declare global {
       user: {
         sub: number;
         username: string;
+        userType: UserType;
         permissions: string[];
         [key: string]: unknown;
       };

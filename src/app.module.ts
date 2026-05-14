@@ -12,6 +12,7 @@ import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { CategoryModule } from './modules/category/category.module';
 import { ProductModule } from './modules/product/product.module';
+import { CustomerProfileModule } from './modules/customer-profile/customer-profile.module';
 import {
   AuditLogInterceptor,
   TransformInterceptor,
@@ -32,6 +33,7 @@ import { PermissionValMiddleware } from './common/middlewares/permission-val.mid
     DashboardModule,
     CategoryModule,
     ProductModule,
+    CustomerProfileModule,
   ],
   controllers: [AppController],
   providers: [

@@ -11,7 +11,7 @@ import {
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { Permissions } from 'src/common/decorators';
+import { Permissions, Public } from 'src/common/decorators';
 import { CategoryPermissions } from './permissions/category.permissions';
 
 @Controller('categories')
@@ -24,13 +24,13 @@ export class CategoryController {
     return this.categoryService.create(createCategoryDto);
   }
 
-  @Permissions(CategoryPermissions.PERMISSIONS.CATEGORY_READ)
+  @Public()
   @Get()
   findAll() {
     return this.categoryService.findAll();
   }
 
-  @Permissions(CategoryPermissions.PERMISSIONS.CATEGORY_READ)
+  @Public()
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.categoryService.findOne(id);

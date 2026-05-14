@@ -17,6 +17,15 @@ export class AuthController {
 
   @Public()
   @HttpCode(HttpStatus.OK)
+  @Post('admin/login')
+  async adminLogin(
+    @Body() loginDto: LoginDto,
+  ): Promise<{ accessToken: string }> {
+    return this.authService.adminLogin(loginDto);
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);

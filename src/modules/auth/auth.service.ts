@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { AccountType, UserType } from '@prisma/client';
 import { comparePassword } from 'src/common/utils/hash.util';
 import { RolesService } from '../roles/roles.service';
 import { UserService } from '../user/user.service';
@@ -23,8 +24,44 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
+    if (
+      user.userType !== UserType.CUSTOMER &&
+      user.userType !== UserType.ADMIN
+    ) {
+      throw new UnauthorizedException('This account is not a customer account');
+    }
+    const payload = {
+      username: user.username,
+      sub: user.id,
+      userType: user.userType,
+      permissions: [],
+    };
+    const accessToken = await this.jwtService.signAsync(payload);
+    return { accessToken };
+  }
+
+  async adminLogin(loginDto: LoginDto): Promise<{ accessToken: string }> {
+    const { username, password } = loginDto;
+    const user = await this.userService.findOne(username);
+    if (!user || !user.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    const isPasswordValid = await comparePassword(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (user.userType === UserType.CUSTOMER) {
+      throw new UnauthorizedException(
+        'This account is not authorized for the admin panel',
+      );
+    }
     const permissions = await this.getPermissions(user.roleId);
-    const payload = { username: user.username, sub: user.id, permissions };
+    const payload = {
+      username: user.username,
+      sub: user.id,
+      userType: user.userType,
+      permissions,
+    };
     const accessToken = await this.jwtService.signAsync(payload);
     return { accessToken };
   }
@@ -39,7 +76,11 @@ export class AuthService {
     if (existingEmail) {
       throw new UnauthorizedException('Email already exists');
     }
-    return this.userService.create(registerDto);
+    return this.userService.create({
+      ...registerDto,
+      accountType: AccountType.LOCAL,
+      userType: UserType.CUSTOMER,
+    });
   }
 
   async getPermissions(roleId: number | null): Promise<string[]> {

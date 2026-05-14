@@ -1,4 +1,4 @@
-import { AccountType } from '@prisma/client';
+import { AccountType, UserType } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
@@ -30,6 +30,10 @@ export class QueryUserDto {
   @IsOptional()
   @IsEnum(AccountType)
   accountType?: AccountType;
+
+  @IsOptional()
+  @IsEnum(UserType)
+  userType?: UserType;
 
   @IsOptional()
   @Transform(({ value }) => parseInt(value as string, 10))

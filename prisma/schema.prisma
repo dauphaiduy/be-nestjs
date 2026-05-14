@@ -11,17 +11,19 @@ datasource db {
 }
 
 model User {
-  id          Int         @id @default(autoincrement())
-  email       String      @unique
-  username    String?     @unique
-  password    String?
-  name        String?
-  isActive    Boolean     @default(false)
-  accountType AccountType @default(LOCAL)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @default(now()) @updatedAt
-  roleId      Int
-  role        Role       @relation(fields: [roleId], references: [id])
+  id              Int              @id @default(autoincrement())
+  email           String           @unique
+  username        String?          @unique
+  password        String?
+  name            String?
+  isActive        Boolean          @default(false)
+  accountType     AccountType      @default(LOCAL)
+  userType        UserType         @default(CUSTOMER)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @default(now()) @updatedAt
+  roleId          Int?
+  role            Role?            @relation(fields: [roleId], references: [id])
+  customerProfile CustomerProfile?
 
   @@map("users")
 }
@@ -30,6 +32,12 @@ enum AccountType {
   LOCAL
   GOOGLE
   GITHUB
+}
+
+enum UserType {
+  ADMIN
+  STAFF
+  CUSTOMER
 }
 
 model Role {
@@ -90,4 +98,17 @@ model Product {
   updatedAt   DateTime      @default(now()) @updatedAt
 
   @@map("products")
+}
+
+model CustomerProfile {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id])
+  fullName  String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("customer_profiles")
 }

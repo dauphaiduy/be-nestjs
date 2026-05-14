@@ -1,11 +1,5 @@
-import { AccountType } from '@prisma/client';
-import {
-  IsEmail,
-  IsEnum,
-  IsNumber,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { AccountType, UserType } from '@prisma/client';
+import { IsEmail, IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
 
 export class CreateUserDto {
   @IsEmail()
@@ -26,6 +20,11 @@ export class CreateUserDto {
   @IsEnum(AccountType)
   accountType: AccountType;
 
-  @IsNumber()
-  roleId: number;
+  @IsOptional()
+  @IsEnum(UserType)
+  userType?: UserType;
+
+  @IsOptional()
+  @IsInt()
+  roleId?: number;
 }
