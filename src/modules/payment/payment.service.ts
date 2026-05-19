@@ -21,6 +21,7 @@ import {
   VnpayGateway,
   ZalopayGateway,
 } from './gateways';
+import { PaymentGateway as PaymentSocketGateway } from './payment.gateway';
 
 @Injectable()
 export class PaymentService {
@@ -31,6 +32,7 @@ export class PaymentService {
     private readonly prisma: PrismaService,
     private readonly paymentTransactionQueries: PaymentTransactionQueries,
     private readonly paymentTransactionRepository: PaymentTransactionRepository,
+    private readonly paymentSocketGateway: PaymentSocketGateway,
     private readonly momoGateway: MomoGateway,
     private readonly zalopayGateway: ZalopayGateway,
     private readonly vnpayGateway: VnpayGateway,
@@ -60,6 +62,54 @@ export class PaymentService {
     }
 
     const gateway = this.resolveGateway(dto.provider);
+
+    // Reuse existing active transaction to avoid duplicates
+    const existing = await this.paymentTransactionQueries.findOne({
+      where: {
+        orderId: dto.orderId,
+        status: { in: [PaymentStatus.PENDING, PaymentStatus.PROCESSING] },
+      },
+    });
+
+    if (existing) {
+      const result = await gateway.createPayment({
+        orderId: order.id,
+        amount: Number(order.totalAmount),
+        transactionId: existing.id,
+        returnUrl: dto.returnUrl,
+        description: dto.description,
+      });
+
+      if (existing.status === PaymentStatus.PENDING) {
+        // Gateway was never reached on the previous attempt — persist the result now
+        await this.paymentTransactionRepository.update({
+          where: { id: existing.id },
+          data: {
+            transactionId: result.providerTransactionId,
+            status: PaymentStatus.PROCESSING,
+            rawRequest: result.rawRequest as Prisma.InputJsonValue,
+            rawResponse: result.rawResponse as Prisma.InputJsonValue,
+          },
+        });
+      }
+      // PROCESSING: gateway already called successfully — no DB update needed,
+      // just return the regenerated URL so the client can re-display QR / redirect.
+
+      this.paymentSocketGateway.emitPending({
+        orderId: order.id,
+        transactionId: existing.id,
+        status: PaymentStatus.PROCESSING,
+        paymentUrl: result.paymentUrl,
+        qrCode: result.qrCode ?? null,
+        provider: dto.provider,
+      });
+
+      return {
+        transactionId: existing.id,
+        paymentUrl: result.paymentUrl,
+        qrCode: result.qrCode ?? null,
+      };
+    }
 
     return this.prisma.$transaction(async (tx) => {
       // Create a PENDING transaction record first
@@ -91,11 +141,23 @@ export class PaymentService {
         },
       });
 
-      return {
+      const response = {
         transactionId: txRecord.id,
         paymentUrl: result.paymentUrl,
         qrCode: result.qrCode ?? null,
       };
+
+      // Notify subscribed clients that payment is in progress
+      this.paymentSocketGateway.emitPending({
+        orderId: order.id,
+        transactionId: txRecord.id,
+        status: PaymentStatus.PROCESSING,
+        paymentUrl: result.paymentUrl,
+        qrCode: result.qrCode ?? null,
+        provider: dto.provider,
+      });
+
+      return response;
     });
   }
 
@@ -144,6 +206,13 @@ export class PaymentService {
         where: { id: transaction.orderId },
         data: { status: 'CONFIRMED' },
       });
+    });
+
+    // Notify subscribed clients that payment succeeded
+    this.paymentSocketGateway.emitSuccess({
+      orderId: transaction.orderId,
+      transactionId: transaction.id,
+      status: PaymentStatus.SUCCESS,
     });
 
     return { received: true };

@@ -22,12 +22,13 @@
    - [Payments](#payments)
 7. [Full Shopping & Payment Flow](#full-shopping--payment-flow)
 8. [Payment Gateway — SePay (Bank Transfer QR)](#payment-gateway--sepay-bank-transfer-qr)
-9. [Standard Response Format](#standard-response-format)
-10. [Authentication & Authorization](#authentication--authorization)
-11. [Global Providers](#global-providers)
-12. [Data Layer — Queries & Repositories](#data-layer--queries--repositories)
-13. [Running the Application](#running-the-application)
-14. [Docker](#docker)
+9. [WebSocket — Real-time Payment Status](#websocket--real-time-payment-status)
+10. [Standard Response Format](#standard-response-format)
+11. [Authentication & Authorization](#authentication--authorization)
+12. [Global Providers](#global-providers)
+13. [Data Layer — Queries & Repositories](#data-layer--queries--repositories)
+14. [Running the Application](#running-the-application)
+15. [Docker](#docker)
 
 ---
 
@@ -45,6 +46,7 @@ A RESTful NestJS API providing:
 - Product catalogue management with category organisation — public read access
 - **Shopping flow** — cart management, atomic checkout with stock reservation, order lifecycle state machine, abandoned-order auto-release scheduler
 - **Payment flow** — multi-provider gateway adapter (SePay, MoMo, ZaloPay, VNPay), webhook handling with idempotency, transaction lifecycle, refund support
+- **Real-time payment updates** — Socket.IO WebSocket gateway pushes `payment:pending`, `payment:success`, and `payment:failed` events to subscribed clients
 - Standardised API response envelope and global exception handling
 
 ---
@@ -61,6 +63,7 @@ A RESTful NestJS API providing:
 | Validation | `class-validator` + `class-transformer` |
 | Password hashing | `bcrypt` |
 | Scheduler | `@nestjs/schedule` |
+| WebSocket | `@nestjs/websockets` + `socket.io` |
 | Tunnel (dev) | ngrok |
 | Runtime | Node.js 22 |
 | Container | Docker + Docker Compose |
@@ -115,11 +118,12 @@ src/
     ├── cart/               Cart management
     ├── order/              Checkout, order lifecycle, abandoned-order scheduler
     └── payment/
-        ├── dto/            CheckoutPaymentDto, QueryPaymentDto, RefundPaymentDto
-        ├── gateways/       PaymentGateway interface + SePay, MoMo, ZaloPay, VNPay adapters
-        ├── permissions/    PaymentPermissions class
-        ├── pipes/          ParsePaymentProviderPipe (case-insensitive enum)
-        └── queues/         BullMQ processor stub (ready to activate)
+        ├── dto/              CheckoutPaymentDto, QueryPaymentDto, RefundPaymentDto
+        ├── gateways/         PaymentGateway interface + SePay, MoMo, ZaloPay, VNPay adapters
+        ├── permissions/      PaymentPermissions class
+        ├── pipes/            ParsePaymentProviderPipe (case-insensitive enum)
+        ├── queues/           BullMQ processor stub (ready to activate)
+        └── payment.gateway.ts  Socket.IO WebSocket gateway — real-time payment events
 ```
 
 ---
@@ -390,7 +394,9 @@ PENDING → CONFIRMED → SHIPPED → DELIVERED
                 DELIVERED → REFUNDED
 ```
 
-**Abandoned-order scheduler:** every 5 minutes, `PENDING` orders older than 15 minutes are cancelled and stock is restored.
+**Abandoned-order scheduler:** every 5 minutes, `PENDING` orders older than 30 minutes are cancelled, stock is restored, and any `PENDING`/`PROCESSING` payment transactions are set to `CANCELLED`.
+
+When an order is **manually cancelled** via `PATCH /orders/:id/status`, the same atomic transaction also cancels any active payment transactions for that order.
 
 ---
 
@@ -398,12 +404,20 @@ PENDING → CONFIRMED → SHIPPED → DELIVERED
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/payments/checkout` | JWT | Initiate payment for an order |
+| `POST` | `/payments/checkout` | JWT | Initiate payment for an order — reuses existing active transaction if one exists |
 | `POST` | `/payments/webhook/:provider` | **Public** | Gateway webhook callback |
 | `GET` | `/payments/status/:orderId` | JWT | Query payment transactions for an order |
 | `POST` | `/payments/refund` | JWT | Refund a SUCCESS transaction |
 
-**Providers:** `SEPAY` \| `MOMO` \| `ZALOPAY` \| `VNPAY` (case-insensitive)
+**Idempotent checkout:** calling `POST /payments/checkout` when an active transaction already exists for the order does **not** create a duplicate:
+
+| Existing transaction status | Behaviour |
+|-----------------------------|----------|
+| `PENDING` | Gateway re-called, DB record updated to `PROCESSING`, WS `payment:pending` re-emitted |
+| `PROCESSING` | Gateway re-called (idempotent), DB untouched, WS `payment:pending` re-emitted |
+| `SUCCESS` / `FAILED` / `CANCELLED` / `REFUNDED` | No match — new transaction created normally |
+
+**Cancellation cascade:** when an order transitions to `CANCELLED` (manually or via the scheduler), all `PENDING` and `PROCESSING` payment transactions for that order are set to `CANCELLED` in the same atomic DB transaction.
 
 ```bash
 # Initiate payment
@@ -442,13 +456,16 @@ curl /v1/payments/status/42 \
 3. GET  /products               → browse products
 4. POST /cart/items             → add items to cart
 5. POST /orders/checkout        → create order (stock deducted atomically)
-6. POST /payments/checkout      → initiate payment → get QR / payment URL
-7.      [Customer pays]
-8. POST /payments/webhook/:provider  → gateway notifies server
+6. WS   connect /payment        → subscribe to payment:42 room
+7. POST /payments/checkout      → initiate payment → get QR / payment URL
+         └─ WS event: payment:pending  → frontend shows QR / spinner
+8.      [Customer pays]
+9. POST /payments/webhook/:provider  → gateway notifies server
          └─ verifyCallback()    → validate signature / content match
          └─ DB transaction      → PaymentTransaction.status = SUCCESS
                                 → Order.status = CONFIRMED
-9. GET  /payments/status/:id    → confirm SUCCESS
+         └─ WS event: payment:success → frontend redirects to confirmed page
+10. GET /payments/status/:id    → confirm SUCCESS (polling fallback)
 ```
 
 ---
@@ -457,7 +474,7 @@ curl /v1/payments/status/42 \
 
 SePay works differently from card gateways — no API call is needed to create a payment. Instead:
 
-1. **`createPayment`** — generates a reference code (`THANHTOAN{orderId}`), builds a QR URL, stores the ref code as `transactionId` in `payment_transactions`
+1. **`createPayment`** — generates a reference code (`SE{orderId}`), builds a QR URL, stores the ref code as `transactionId` in `payment_transactions`
 2. **Customer scans QR**, transfers money, and types the reference code in the transfer description
 3. **SePay fires a webhook** `POST /payments/webhook/sepay` with the transfer details
 4. **`verifyCallback`** — reads `payload.content` (what the customer typed) and matches it against DB `transactionId`
@@ -479,6 +496,74 @@ SePay works differently from card gateways — no API call is needed to create a
 SEPAY_BANK=VCB          # Bank code (e.g. VCB, TCB, MB)
 SEPAY_ACCOUNT=1234567890  # Your bank account number
 ```
+
+---
+
+## WebSocket — Real-time Payment Status
+
+The server exposes a Socket.IO namespace at `/payment` (same port as the HTTP server). Clients connect with a valid JWT and subscribe to a per-order room to receive live payment status updates.
+
+### Connection
+
+```js
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:3000/payment', {
+  // Pass JWT in handshake auth OR Authorization header
+  auth: { token: 'Bearer <accessToken>' },
+});
+```
+
+If the token is missing or invalid the server immediately disconnects the client.
+
+### Subscribe to an order
+
+```js
+// Tell the server which order to watch
+socket.emit('subscribe_payment', { orderId: 42 });
+
+// Server acknowledges
+socket.on('subscribed', (data) => {
+  console.log(data); // { orderId: 42, room: 'payment:42' }
+});
+```
+
+### Incoming events
+
+| Event | When fired | Payload |
+|-------|-----------|--------|
+| `payment:pending` | Immediately after `POST /payments/checkout` succeeds | `{ orderId, transactionId, status: "PROCESSING", paymentUrl, qrCode, provider }` |
+| `payment:success` | After the gateway webhook confirms payment | `{ orderId, transactionId, status: "SUCCESS" }` |
+| `payment:failed` | After the gateway signals failure/cancellation | `{ orderId, transactionId, status: "FAILED" }` |
+
+### Full frontend example
+
+```js
+const socket = io('http://localhost:3000/payment', {
+  auth: { token: `Bearer ${accessToken}` },
+});
+
+socket.emit('subscribe_payment', { orderId: 42 });
+
+socket.on('payment:pending', ({ qrCode, paymentUrl }) => {
+  // Show QR code image or redirect to payment URL
+  showQr(qrCode);
+});
+
+socket.on('payment:success', () => {
+  // Payment confirmed — navigate to order confirmation page
+  router.push('/orders/42/confirmed');
+});
+
+socket.on('payment:failed', ({ status }) => {
+  // Show error state
+  showError(`Payment ${status}`);
+});
+```
+
+### Server-side room naming
+
+Each order gets its own room: `payment:{orderId}`. Only clients that have called `subscribe_payment` with that `orderId` receive its events.
 
 ---
 

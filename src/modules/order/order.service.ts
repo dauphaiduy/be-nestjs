@@ -168,7 +168,7 @@ export class OrderService {
       );
     }
 
-    // If cancelling, restore stock
+    // If cancelling, restore stock and cancel any active payment transactions
     if (dto.status === OrderStatus.CANCELLED) {
       return this.prisma.$transaction(async (tx) => {
         const fullOrder = await tx.order.findUnique({
@@ -182,6 +182,15 @@ export class OrderService {
             data: { stock: { increment: item.quantity } },
           });
         }
+
+        // Cancel any PENDING or PROCESSING payment transactions for this order
+        await tx.paymentTransaction.updateMany({
+          where: {
+            orderId: id,
+            status: { in: ['PENDING', 'PROCESSING'] },
+          },
+          data: { status: 'CANCELLED' },
+        });
 
         return tx.order.update({
           where: { id },
@@ -215,6 +224,15 @@ export class OrderService {
             data: { stock: { increment: item.quantity } },
           });
         }
+
+        // Cancel any PENDING or PROCESSING payment transactions for this order
+        await tx.paymentTransaction.updateMany({
+          where: {
+            orderId: order.id,
+            status: { in: ['PENDING', 'PROCESSING'] },
+          },
+          data: { status: 'CANCELLED' },
+        });
 
         await tx.order.update({
           where: { id: order.id },

@@ -1,5 +1,12 @@
 import { PaymentProvider } from '@prisma/client';
-import { IsEnum, IsInt, IsOptional, IsString, IsUrl, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Min,
+} from 'class-validator';
 
 export class CheckoutPaymentDto {
   @IsInt()
@@ -9,7 +16,9 @@ export class CheckoutPaymentDto {
   @IsEnum(PaymentProvider)
   provider: PaymentProvider;
 
-  @IsUrl()
+  @IsUrl({
+    require_tld: false,
+  })
   returnUrl: string;
 
   @IsOptional()

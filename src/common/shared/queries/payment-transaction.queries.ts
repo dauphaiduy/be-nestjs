@@ -15,7 +15,6 @@ export class PaymentTransactionQueries extends BaseRepository {
     ...args: Parameters<typeof this.client.paymentTransaction.findUnique>
   ) => this.client.paymentTransaction.findUnique(...args);
 
-  count = (
-    ...args: Parameters<typeof this.client.paymentTransaction.count>
-  ) => this.client.paymentTransaction.count(...args);
+  count = (...args: Parameters<typeof this.client.paymentTransaction.count>) =>
+    this.client.paymentTransaction.count(...args);
 }

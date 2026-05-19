@@ -26,7 +26,7 @@ export class SePayGateway implements PaymentGateway {
   // SePay QR base URL — format: https://qr.sepay.vn/img?...
   private static readonly QR_BASE = 'https://qr.sepay.vn/img';
 
-  createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult> {
+  async createPayment(input: CreatePaymentInput): Promise<CreatePaymentResult> {
     // SePay does not require an API call — customer transfers to your bank account
     // with a generated reference code in the description.
     // TODO: inject ConfigService and read SEPAY_BANK, SEPAY_ACCOUNT from env.
@@ -55,14 +55,14 @@ export class SePayGateway implements PaymentGateway {
     });
   }
 
-  verifyCallback(
+  async verifyCallback(
     payload: Record<string, unknown>,
   ): Promise<VerifyCallbackResult> {
-    // `content` is the text the customer typed in the bank transfer description.
+    // `code` is the text the customer typed in the bank transfer description.
     // It must match the refCode we generated in createPayment.
     // TODO: verify HMAC/apikey from SePay webhook header for production.
     // eslint-disable-next-line @typescript-eslint/no-base-to-string
-    const content = String(payload['content'] ?? '');
+    const content = String(payload['code'] ?? '');
     const transferAmount = Number(payload['transferAmount'] ?? 0);
 
     return Promise.resolve({
