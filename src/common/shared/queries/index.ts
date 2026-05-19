@@ -7,3 +7,4 @@ export * from './customer-profile.queries';
 export * from './cart.queries';
 export * from './cart-item.queries';
 export * from './order.queries';
+export * from './payment-transaction.queries';

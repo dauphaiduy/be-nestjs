@@ -10,6 +10,7 @@ import {
   CartQueries,
   CartItemQueries,
   OrderQueries,
+  PaymentTransactionQueries,
 } from './queries';
 import {
   UserRepository,
@@ -21,6 +22,7 @@ import {
   CartRepository,
   CartItemRepository,
   OrderRepository,
+  PaymentTransactionRepository,
 } from './repositories';
 
 const providers = [
@@ -43,6 +45,8 @@ const providers = [
   CartItemRepository,
   OrderQueries,
   OrderRepository,
+  PaymentTransactionQueries,
+  PaymentTransactionRepository,
 ];
 
 @Module({

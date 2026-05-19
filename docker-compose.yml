@@ -35,6 +35,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok
+    restart: unless-stopped
+    command:
+      - "http"
+      - "app:3000"
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-token}
+    ports:
+      - "4040:4040"
 volumes:
   postgres_data:

@@ -159,16 +159,53 @@ model CartItem {
 }
 
 model Order {
-  id          Int         @id @default(autoincrement())
-  userId      Int
-  user        User        @relation(fields: [userId], references: [id])
-  status      OrderStatus @default(PENDING)
-  totalAmount Decimal     @db.Decimal(10, 2)
-  items       OrderItem[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @default(now()) @updatedAt
+  id                  Int                  @id @default(autoincrement())
+  userId              Int
+  user                User                 @relation(fields: [userId], references: [id])
+  status              OrderStatus          @default(PENDING)
+  totalAmount         Decimal              @db.Decimal(10, 2)
+  items               OrderItem[]
+  paymentTransactions PaymentTransaction[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now()) @updatedAt
 
   @@map("orders")
+}
+
+// ─── Payment ─────────────────────────────────────────────────────────────────
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  EXPIRED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  MOMO
+  ZALOPAY
+  VNPAY
+  SEPAY
+}
+
+model PaymentTransaction {
+  id              Int             @id @default(autoincrement())
+  orderId         Int
+  order           Order           @relation(fields: [orderId], references: [id])
+  provider        PaymentProvider
+  transactionId   String?
+  amount          Decimal         @db.Decimal(12, 2)
+  status          PaymentStatus   @default(PENDING)
+  rawRequest      Json?
+  rawResponse     Json?
+  callbackPayload Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @default(now()) @updatedAt
+
+  @@map("payment_transactions")
 }
 
 model OrderItem {
